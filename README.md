@@ -1,7 +1,7 @@
 # esp32-rmt-pwm-decoder
 ESP32 library to decode a 315MHz or 433MHz remote control with minimal overhead 
 
-﻿This library, esp32-rmt-pwm-decoder, is fairly simple, but wouldn’t have been possible without the work done by Suat Özgür and his contributors on the RCSwitch project (ttps://github.com/sui77/rc-switch/). This library also would not be possible without the excellent work done by Wolfgang Schmieder in his development of RcSwitchReceiver (https://github.com/dac1e/RcSwitchReceiver/). I’m especially grateful to Herr Schmieder for his quick response to my concerns while he was developing his library. Thanks again, sir.
+﻿This library, esp32-rmt-pwm-decoder, is fairly simple, but wouldn’t have been possible without the work done by Suat Özgür and his contributors on the RCSwitch project (https://github.com/sui77/rc-switch/). This library also would not be possible without the excellent work done by Wolfgang Schmieder in his development of RcSwitchReceiver (https://github.com/dac1e/RcSwitchReceiver/). I’m especially grateful to Herr Schmieder for his quick response to my concerns while he was developing his library. Thanks again, sir.
 
 The purpose of this library is to decode a 315MHz or 433MHz remote control with a minimal amount of overhead -- but not so minimal that it couldn’t be easily modified. Since I plan to use this library with a talking, arm-moving, skeleton – and do it all on one chip, I needed to decode the values and interfere with any other operations on the chip, else I would have just used RcSwitchReceiver (I don’t mean to cast any shade on RcSwitchReceiver, it’s brilliant and I shamelessly borrowed from it to do what I’ve done).
 
