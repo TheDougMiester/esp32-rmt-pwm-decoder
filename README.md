@@ -11,14 +11,14 @@ In the header file, near the bottom, you’ll find a line that looks a like this
 
 static makeTimingSpec< 1, 450, 20,   1,   31,    1,  3,    3,  1, false>   rxProtocol; //PT2262
 
-the second field (450) is the base pulse width in microseconds – it’s the average pulse width for my 4-button key fob. I have an 8-button remote with an average pulse width of 350. If I want to use that instead, I can change the 350 to 450. If I want to use them both at the same time, I’d open up the error window a bit wider and change the 20 to 30 or so.
+The second field (450) is the base pulse width in microseconds – it’s the average pulse width for my 4-button key fob. I also have an 8-button remote with an average pulse width of 350. If I want to use that, I change the 350 to 450. If I want to use them both at the same time, I’d open up the error window (the 3rd field) a bit wider and change the 20 to 30 or so.
 
 How do you find out your average pulse width to stick in there? Well, either use a $USD20 logic analyzer and PulseView software (free) to look at the pulses, or you can use the example in RcSwitchReceiver called LearnRemoteControl.ino. Another alternative is to use AdvanceReceiveDemo in the rc-switch library. I (unnecessarily) used all three, but the point of the exercise is to know your average pulse width and use their tools to figure out the protocol being used by your remote. Either RcSwitchReceiver or AdvanceReceiveDemo will tell you which protocol you have, if you don’t already know it. I duplicated the format in RcSwitchReceiver, so it’s a simple matter of replacing the PT2262 protocol I have with whatever you’re using.
 
-My hardware:
+My hardware (pictures are available in the main directory):
 1. ESP32-S3-DEVKITC-1-N8R2 (WROOM-1); about $USD15 from Digikey
 2. 3DMakerWorld Adafruit Keyfob 4 Button RF Remote Control – 315MHz; about $USD10 off eBay
 3. 315MHz transmitter/receiver kit; about $USD5 off eBay
 4. A breadboard.
 
-I wired everything together using wires taken from an ethernet cable and kept them as short as possible to keep the EMF to a minimum; those receivers are cheap and kind of noisy. I recommend adding an antenna to the receiver. I’m presently powering the receiver off the 5V and GND pins on the ESP32, but that will change when I put the final system together. 
+I wired everything together using wires taken from an ethernet cable and kept them as short as possible to keep the EMF to a minimum; those receivers are cheap and kind of noisy. I recommend adding an antenna to the receiver to keep the noise to a minimum. I’m presently powering the receiver off the 5V and GND pins on the ESP32, but that will change when I put the final system together. 
