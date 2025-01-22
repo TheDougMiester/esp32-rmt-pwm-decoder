@@ -3,7 +3,7 @@
   Copyright (c) 2025 Doug Brann.  All right reserved. 
   Please see Readme file for list of credits, howto, etc.
   
-  Project home: https://github.com/?????
+  Project home: https://github.com/TheDougMiester/esp32-rmt-pwm-decoder
 
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
