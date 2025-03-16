@@ -26,6 +26,8 @@
 
 #define NUMBER_OF_RMT_SYMBOLS 128
 #define BIT_LENGTH 24 // number of ones and zeros in the signal we're trying to read.
+#include "esp_timer.h"
+
 void RxDecoder::rxSignalHandler(void* param){
 	
 	rmt_symbol_word_t symbols[NUMBER_OF_RMT_SYMBOLS];
@@ -38,10 +40,10 @@ void RxDecoder::rxSignalHandler(void* param){
 
 	rmt_receive_config_t rx_config = {
 
-	// The max value the register can hold is 255/(rx_ch_conf.clk_src), see
-	// https://github.com/espressif/esp-idf/issues/14760 
+		// The max value the register can hold is 255/(rx_ch_conf.clk_src), see
+		// https://github.com/espressif/esp-idf/issues/14760 
+		.signal_range_min_ns = 3000, //3.00µs
 
-		.signal_range_min_ns = 3000, //3.00µs, 
 		//signal_range_max_ns isn't exactly a filter. Pulses above this value trigger a "done" event. 
 		// uint32_t idle_reg_value = ((uint64_t)channel->resolution_hz * config->signal_range_max_ns) / 1000000000UL;
 		.signal_range_max_ns = 32000000, // this is the biggest number I could use with .resolution_hz = 1000000.
@@ -54,7 +56,7 @@ void RxDecoder::rxSignalHandler(void* param){
 	rmt_rx_channel_config_t rx_ch_conf = {
 		.gpio_num = RxDecoder::rxPin, // GPIO number
 		.clk_src = RMT_CLK_SRC_RC_FAST, //RMT_CLK_SRC_DEFAULT (80MHz),       RMT_CLK_SRC_RC_FAST //(8.5 MHz)// select source clock
-		.resolution_hz = 1000000, // with RMT_CLK_SRC_DEFAULT, 1MHz tick resolution is 1 tick = 1us		
+		.resolution_hz =  1000000, // with RMT_CLK_SRC_DEFAULT, 1MHz tick resolution is 1 tick = 1us		
 		.mem_block_symbols = NUMBER_OF_RMT_SYMBOLS, 
 		.flags = {
 			.invert_in = rxProtocol.INVERSE_LEVEL,         // don't invert input signal
@@ -71,11 +73,12 @@ void RxDecoder::rxSignalHandler(void* param){
 	ESP_ERROR_CHECK(rmt_enable(rx_channel));
 	ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(rx_channel, &cbs, rx_queue));
 	ESP_ERROR_CHECK(rmt_receive(rx_channel, symbols, sizeof(symbols), &rx_config));
-
+	
 	while(1) {	
 		// If you set timeout to 0, the scheduler never gets control to assign other tasks (and the whole program gets stuck in
 		// the below wile loop). So, set the timeout to at least one clock tick or insert a vTaskDelay(1) to delay 1 clock tick. 
-		if (xQueueReceive(rx_queue, &rx_data, portMAX_DELAY)) { 
+		if (xQueueReceive(rx_queue, &rx_data, 1)) {//portMAX_DELAY)) { 
+
 			uint32_t rcode = 0;
 			if (rx_data.num_symbols > BIT_LENGTH) { //must be greater than BIT_LENGTH for the header
 				rcode = validateSignal(rx_data.received_symbols, rx_data.num_symbols);
@@ -86,7 +89,8 @@ void RxDecoder::rxSignalHandler(void* param){
 				} /* else {  //debug
 					//rxDataDump(rx_data.num_symbols, rx_items);
 					//Serial.printf("----------------------\n");
-				} */	
+				} */
+		
 			} //if xQueueReceive(...)
 			/*else {  //debug
 				//rxDataDump(rx_data.num_symbols, rx_items);
@@ -94,6 +98,8 @@ void RxDecoder::rxSignalHandler(void* param){
 			}*/			
 			ESP_ERROR_CHECK(rmt_receive(rx_channel, symbols, sizeof(symbols), &rx_config));
 		} //if xQueue
+		vTaskDelay(1); //yield the processor
+
 	} //while(1)
 	
 	rmt_disable(rx_channel);
@@ -120,37 +126,38 @@ uint32_t RxDecoder::validateSignal(rmt_symbol_word_t *item, size_t &len) {
 
     uint32_t code = 0x00000000;
 	int32_t bit_value = -1;
-	size_t bit_size = 0;
+	size_t num_bits_found = 0;
 	size_t i;
 	
-	int8_t num_errors = 0;
 	int8_t header_pos = 0;
 	header_pos = checkHeaderWord(item, len, 0 );
 	if (header_pos < 0 ) return 0;
-	for(i = header_pos+1, bit_size = 0; (len - i > BIT_LENGTH), bit_size < BIT_LENGTH; i++){ 
+	for(i = header_pos+1, num_bits_found = 0; (len - i > BIT_LENGTH), num_bits_found < BIT_LENGTH; i++){ 
 	
 		bit_value = validateRmtWord(item[i]);
 		if(bit_value >= 0) {
 			// Shift code left by 1 bit and OR with returned value. If m was 11100 and bit_value ==1, m would become 111001
             code = (code << 1) | bit_value;
-			bit_size++;
+			num_bits_found++;
 		} else {
 			//debug
-			//Serial.printf("FAIL: i:%d, bit_size: %d, d0:%d, d1:%d, L0:%d L1:%d\n",
-			//i, bit_size, item[i].duration0, item[i].duration1, item[i].level0, item[i].level1);
+			//Serial.printf("FAIL: i:%d, num_bits_found: %d, d0:%d, d1:%d, L0:%d L1:%d\n",
+			//i, num_bits_found, item[i].duration0, item[i].duration1, item[i].level0, item[i].level1);
 
 			//something went sideways. From looking at the data dumps it seems to usually mean
 			//that some crappy data snuck in. We can keep trying though - most fobs send the signal 3 times
+			// find the next header and keep going.
 			header_pos = checkHeaderWord(item, len, i);
 			if (header_pos < 0 ) return 0;
-			// now do something evil in a for loop: Adjust the counter.
+			// We found another header. Now do something evil in a "for" loop: Adjust the counter. I'm sorry.
 			i = header_pos;
 			code = 0x00000000;
-			bit_size = 0;
+			num_bits_found = 0;
 		}
 	}
-    if (bit_size < BIT_LENGTH) {
-		//Serial.printf("not enough bits. %d", bit_size);
+    if (num_bits_found < BIT_LENGTH) {
+		// there weren't enough bits left to get a 24-bit code.
+		//Serial.printf("not enough bits. %d", num_bits_found);
 		code = 0x00000000;
 	}  		
 	return code;
@@ -173,7 +180,7 @@ int8_t RxDecoder::checkHeaderWord(rmt_symbol_word_t *item, size_t &len, uint8_t 
 	uint8_t i;
 	for (i=starting_point; i < (len-BIT_LENGTH-1) ; i++ ) {
 		if ((item[i].duration1 > (rxProtocol.usecSynchLow_lowerBound-200)))
-		//just look for the long 0. I haven't found any cases where the other bit is needed.
+		//just look for the long 0. I haven't found any cases where the other bit is needed. IF you do, just uncomment below
 		//&&
 		//((item[i].duration0 < rxProtocol.usecSynchHigh_upperBound) && (item[i].duration0 > rxProtocol.usecSynchHigh_lowerBound)))
 		{
@@ -184,6 +191,7 @@ int8_t RxDecoder::checkHeaderWord(rmt_symbol_word_t *item, size_t &len, uint8_t 
 
 	//if we got here, well...we never found the header. Return a value greater than the length.
 	//Serial.printf("header not found counter was %i, len-bitlength was:%d \n", i, len-BIT_LENGTH-1,len);
+	//rxDataDump(len, item);
 	return(-1);
 }
 
