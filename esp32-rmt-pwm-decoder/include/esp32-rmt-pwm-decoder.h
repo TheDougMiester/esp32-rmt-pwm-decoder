@@ -3,8 +3,8 @@
   Copyright (c) 2025 Doug Brann.  All right reserved. 
   Please see Readme file for list of credits, howto, etc.
   
-  Project home: https://github.com/TheDougMiester/esp32-rmt-pwm-decoder
-  
+  Project home: https://github.com/?????
+
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
   License as published by the Free Software Foundation; either
@@ -23,25 +23,35 @@
 #ifndef __ESP32_RMT_RX_DECODER__
 #define __ESP32_RMT_RX_DECODER__
 #include <Arduino.h>
-#include "freertos/FreeRTOS.h"
+#include "soc/reg_base.h"
+#include "freertos/FreeRTOS.h" 
 #include "freertos/task.h"
 #include "driver/rmt_rx.h"
 #include "driver/rmt_tx.h"
 #include "driver/rmt_encoder.h"
+#include "esp_idf_version.h"
+
+/* definition to expand macro then apply to pragma message */
+#define VALUE_TO_STRING(x) #x
+#define VALUE(x) VALUE_TO_STRING(x)
+#define VAR_NAME_VALUE(var) #var "="  VALUE(var)
 
 #ifndef ESP32
 #error esp32-rmt-pwm-decoder can only be compiled on an ESP32
 #endif
-#if (ESP_IDF_VERSION_MAJOR < 5)
+#if (ESP_IDF_VERSION_MAJOR < 5) 
 #error esp32-rmt-pwm-decoder requires ESP-IDF version 5 or greater
+#elif (ESP_IDF_VERSION_MINOR < 4)
+#pragma message (VAR_NAME_VALUE(ESP_IDF_VERSION_MINOR))
+#error esp32-rmt-pwm-decoder requires ESP-IDF version 5.4 or greater
 #endif	
 
-class RxDecoder {
+ class RxDecoder {
   private:
-	static uint8_t rxPin;
+	static gpio_num_t rxPin;
 	static uint32_t nReceivedValue;
 	static uint8_t nReceivedBitlength;
-    static bool checkHeaderWord(rmt_symbol_word_t &item);
+	static int8_t checkHeaderWord(rmt_symbol_word_t *item, size_t &len, uint8_t starting_point);
     static uint32_t validateSignal(rmt_symbol_word_t *item, size_t &len);
     static int32_t validateRmtWord(rmt_symbol_word_t &item);
     static void rxDataDump(size_t len, rmt_symbol_word_t *item);
@@ -51,7 +61,7 @@ class RxDecoder {
     RxDecoder(){};
 	~RxDecoder(){};
 	
-	static void setRxPin(uint8_t l_rxPin);
+	static void setRxPin(gpio_num_t l_rxPin);
 	static void rxSignalHandler(void* param);
 	static bool available();
 	static void resetAvailable();
@@ -100,7 +110,9 @@ class RxDecoder {
 
     // now use the template to build the stuct
 	//			    	 <#, clk,  %, syHi,  syLo,  0hi,0lo,  1hi,1lo,invLvl> ->protocol structure
-    static makeTimingSpec< 1, 450, 20,   1,   31,    1,  3,    3,  1, false>   rxProtocol; 
+    //static makeTimingSpec< 1, 450, 20,   1,   31,    1,  3,    3,  1, false>   rxProtocol; //PT2262 4-button fob
+	static makeTimingSpec< 1, 360, 60,   1,   31,    1,  3,    3,  1, false>   rxProtocol; //PT2262 8-button remote
     // end of compile-time calculations
+	
 };
 #endif
