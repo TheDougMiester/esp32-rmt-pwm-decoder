@@ -22,7 +22,7 @@
 */
 #include "esp32-rmt-pwm-decoder.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/ringbuf.h"
+#include "soc/gpio_struct.h"
 
 #define NUMBER_OF_RMT_SYMBOLS 128
 #define BIT_LENGTH 24 // number of ones and zeros in the signal we're trying to read.
@@ -46,7 +46,7 @@ void RxDecoder::rxSignalHandler(void* param){
 
 		//signal_range_max_ns isn't exactly a filter. Pulses above this value trigger a "done" event. 
 		// uint32_t idle_reg_value = ((uint64_t)channel->resolution_hz * config->signal_range_max_ns) / 1000000000UL;
-		.signal_range_max_ns = 32000000, // this is the biggest number I could use with .resolution_hz = 1000000.
+		.signal_range_max_ns = 32000000, // this is the biggest number I could use with .resolution_hz = 1000000. (32ms)
 	
 		.flags {
 			.en_partial_rx = 0,
@@ -59,17 +59,25 @@ void RxDecoder::rxSignalHandler(void* param){
 		.resolution_hz =  1000000, // with RMT_CLK_SRC_DEFAULT, 1MHz tick resolution is 1 tick = 1us		
 		.mem_block_symbols = NUMBER_OF_RMT_SYMBOLS, 
 		.flags = {
-			.invert_in = rxProtocol.INVERSE_LEVEL,         // don't invert input signal
+			.invert_in = rxProtocol.INVERSE_LEVEL,      
 			.with_dma = 1,  //if set to true on ESP-IDV v < 5.5, the data stops coming through. No idea why.
 		}
 	};
-	
+	//I'm not clear on whether I even need this.
+	rmt_carrier_config_t rx_carrier_cfg = {
+		.frequency_hz = 25000,    // 25 KHz carrier, should be smaller than the transmitter's carrier frequency
+		.duty_cycle = 0.33,       // duty cycle 33%
+		.flags =  {
+			.polarity_active_low = false, // the carrier is modulated to high level
+		}	
+	};
+
 	rmt_channel_handle_t rx_channel = NULL;
 	rmt_new_rx_channel(&rx_ch_conf, &rx_channel);   
 	rmt_rx_event_callbacks_t cbs = {
 		.on_recv_done = rxDone,
 	};
-
+	ESP_ERROR_CHECK(rmt_apply_carrier(rx_channel, &rx_carrier_cfg));
 	ESP_ERROR_CHECK(rmt_enable(rx_channel));
 	ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(rx_channel, &cbs, rx_queue));
 	ESP_ERROR_CHECK(rmt_receive(rx_channel, symbols, sizeof(symbols), &rx_config));
@@ -87,14 +95,15 @@ void RxDecoder::rxSignalHandler(void* param){
 					RxDecoder::nReceivedBitlength = rx_data.num_symbols;
 					//Serial.printf("Code: 0x%X, number of symbols %d\n", rcode, rx_data.num_symbols);
 				} /* else {  //debug
-					//rxDataDump(rx_data.num_symbols, rx_items);
+					rxDataDump(rx_data.num_symbols, rx_data.received_symbols);
 					//Serial.printf("----------------------\n");
 				} */
 		
 			} //if xQueueReceive(...)
 			/*else {  //debug
-				//rxDataDump(rx_data.num_symbols, rx_items);
 				Serial.printf("not enough symbols to process %d\n", rx_data.num_symbols);
+
+				//rxDataDump(rx_data.num_symbols, rx_data.received_symbols);
 			}*/			
 			ESP_ERROR_CHECK(rmt_receive(rx_channel, symbols, sizeof(symbols), &rx_config));
 		} //if xQueue
